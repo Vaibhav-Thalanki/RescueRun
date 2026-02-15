@@ -10,6 +10,16 @@ class LatLng(BaseModel):
     lat: float
     lng: float
 
+class NearestShop(BaseModel):
+    shop: str
+    price: float
+    address: str
+    lat: float
+    lng: float
+    distance_km: float
+    distance_mi: float
+    navigation_link: str
+
 class ShopPrice(BaseModel):
     shop: str
     price: float
@@ -22,6 +32,8 @@ class Item(BaseModel):
     notes: str = Field(default="", max_length=120)
     shops: List[str] = Field(default_factory=list)  # Shop names from SerpAPI (for backward compatibility)
     shop_prices: List[ShopPrice] = Field(default_factory=list)  # Detailed price info from SerpAPI
+
+
 
 class AInvokeIn(BaseModel):
     text: str = Field(min_length=1, max_length=500)

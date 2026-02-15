@@ -28,3 +28,7 @@ export function claimRequest(id) {
 export function invokeAI({ text, location, requester_afford = 0 }) {
   return api.post('/ai/invoke', { text, location, requester_afford }).then((r) => r.data);
 }
+
+export function findShops(id, lat, lng) {
+  return api.post(`/requests/${id}/find-shops`, { lat, lng }).then((r) => r.data);
+}

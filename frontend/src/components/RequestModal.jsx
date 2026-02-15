@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { fetchRequestDetail, donateToRequest, claimRequest } from '../api/requests';
+import { fetchRequestDetail, donateToRequest, claimRequest, findShops } from '../api/requests';
 
 const CATEGORY_ICONS = {
   meds: '💊',
@@ -19,13 +19,26 @@ export default function RequestModal({ requestId, onClose, onDonated, onClaimed 
   const [claiming, setClaiming] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
   const [error, setError] = useState(null);
+  const [shopData, setShopData] = useState(null);
+  const [loadingShops, setLoadingShops] = useState(false);
 
   useEffect(() => {
     if (!requestId) return;
     setLoading(true);
     setError(null);
+    setShopData(null); // Reset shop data
+    
+    // Fetch request details
     fetchRequestDetail(requestId)
-      .then((d) => setDetail(d.request))
+      .then((d) => {
+        setDetail(d.request);
+        // Auto-fetch shops in background if location exists
+        if (d.request.lat && d.request.lng) {
+          findShops(requestId, d.request.lat, d.request.lng)
+            .then(setShopData)
+            .catch(err => console.error("Failed to fetch shops in background", err));
+        }
+      })
       .catch((e) => setError(e.response?.data?.detail || 'Failed to load'))
       .finally(() => setLoading(false));
   }, [requestId]);
@@ -47,6 +60,21 @@ export default function RequestModal({ requestId, onClose, onDonated, onClaimed 
     }
   };
 
+  const handleFindShops = async () => {
+    if (!detail) return;
+    setLoadingShops(true);
+    setError(null);
+    try {
+      const res = await findShops(requestId, detail.lat, detail.lng);
+      setShopData(res);
+    } catch (e) {
+      console.error(e);
+      setError('Failed to find shops');
+    } finally {
+      setLoadingShops(false);
+    }
+  };
+
   const handleClaim = async () => {
     setClaiming(true);
     setError(null);
@@ -61,6 +89,8 @@ export default function RequestModal({ requestId, onClose, onDonated, onClaimed 
       setClaiming(false);
     }
   };
+
+
 
   const progress = detail ? Math.min(1, detail.progress ?? 0) : 0;
   const isFunded = detail?.status === 'funded';
@@ -161,13 +191,46 @@ export default function RequestModal({ requestId, onClose, onDonated, onClaimed 
                 </div>
 
                 {detail.items?.length > 0 && (
-                  <ul className="text-sm text-gray-300 mb-4 space-y-1">
-                    {detail.items.map((item, i) => (
-                      <li key={i}>
-                        {item.qty} {item.unit} {item.name}
-                        {item.notes ? ` — ${item.notes}` : ''}
-                      </li>
-                    ))}
+                  <ul className="text-sm text-gray-300 mb-4 space-y-3">
+                    {detail.items.map((item, i) => {
+                      const shopInfo = shopData?.items?.find(
+                        (s) => s.item_name.toLowerCase() === item.name.toLowerCase()
+                      )?.nearest_shop;
+                      return (
+                        <li key={i} className="flex flex-col gap-1">
+                          <div className="flex justify-between items-start">
+                            <span>
+                              {item.qty} {item.unit} {item.name}
+                              {item.notes ? ` — ${item.notes}` : ''}
+                            </span>
+                          </div>
+                          
+                          {/* Show shop info only if funded/claimed/delivered */}
+                          {shopData && shopInfo && (isFunded || isClaimed) && (
+                            <div className="bg-white/5 rounded-lg p-2 text-xs mt-1 border border-white/5">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-emerald-400 font-medium">Best option: {shopInfo.name}</span>
+                                <span className="text-gray-400">{shopInfo.distance_mi} mi</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-400">{shopInfo.address}</span>
+                                <a 
+                                  href={shopInfo.navigation_link} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1"
+                                >
+                                  📍 Navigate
+                                </a>
+                              </div>
+                              <div className="mt-1 text-gray-400">
+                                Est. Price: <span className="text-white">${shopInfo.price}</span>
+                              </div>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
 
@@ -195,6 +258,27 @@ export default function RequestModal({ requestId, onClose, onDonated, onClaimed 
 
                 {detail.status === 'open' && (
                   <div className="space-y-3">
+                     {/* Find Shops Button */}
+                    {shopData && (isFunded || isClaimed) && (
+                      <div className="mt-4 space-y-2">
+                        {shopData.items?.map((item, i) => {
+                          const shop = item.nearest_shop;
+                          if (!shop) return null;
+                          return (
+                            <a
+                              key={i}
+                              href={shop.navigation_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block w-full py-3 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-center text-white font-medium"
+                            >
+                              Shop for {item.item_name} <span className="text-blue-200 text-xs">({shop.name})</span>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     <p className="text-sm text-gray-400">Donate</p>
                     <div className="flex gap-2 flex-wrap">
                       {PRESET_AMOUNTS.map((amt) => (
@@ -247,20 +331,72 @@ export default function RequestModal({ requestId, onClose, onDonated, onClaimed 
                       rel="noopener noreferrer"
                       className="block w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 text-center text-white font-medium"
                     >
-                      Open in Google Maps
+                      Open Request Location in Maps
                     </a>
+                    {(!shopData || !shopData.items || shopData.items.length === 0) && (
+                        <button
+                          type="button"
+                          onClick={handleFindShops}
+                          disabled={loadingShops}
+                          className="block w-full py-3 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-center text-white font-medium"
+                        >
+                          {loadingShops ? 'Finding Shops...' : 'Find Nearest Shops'}
+                        </button>
+                    )}
+                    {shopData?.items?.map((item, i) => {
+                        const shop = item.nearest_shop;
+                        if (!shop) return null;
+                        return (
+                          <a
+                            key={i}
+                            href={shop.navigation_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full py-3 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-center text-white font-medium"
+                          >
+                            Shop for {item.item_name} <span className="text-blue-200 text-xs">({shop.name})</span>
+                          </a>
+                        );
+                    })}
                   </div>
                 )}
 
                 {isClaimed && (
-                  <a
-                    href={googleMapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-center text-white font-semibold mt-4"
-                  >
-                    Open in Google Maps
-                  </a>
+                  <div className="mt-4 space-y-2">
+                    <a
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-center text-white font-semibold"
+                    >
+                        Open Request Location in Maps
+                    </a>
+                    {(!shopData || !shopData.items || shopData.items.length === 0) && (
+                        <button
+                          type="button"
+                          onClick={handleFindShops}
+                          disabled={loadingShops}
+                          className="block w-full py-3 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-center text-white font-medium"
+                        >
+                          {loadingShops ? 'Finding Shops...' : 'Find Nearest Shops'}
+                        </button>
+                    )}
+                    {shopData?.items?.map((item, i) => {
+                        const shop = item.nearest_shop;
+                        if (!shop) return null;
+                        return (
+                          <a
+                            key={i}
+                            href={shop.navigation_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full py-3 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-center text-white font-medium"
+                          >
+                            Shop for {item.item_name} <span className="text-blue-200 text-xs">({shop.name})</span>
+                          </a>
+                        );
+                    })}
+                  </div>
                 )}
               </>
             ) : null}
