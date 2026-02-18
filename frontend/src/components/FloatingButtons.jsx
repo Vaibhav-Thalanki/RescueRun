@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 
 export default function FloatingButtons({ onCreateRequest, crisisMode, onCrisisModeToggle }) {
   return (
-    <div className="fixed bottom-[calc(55vh+80px)] right-4 z-[1001] flex flex-col items-end gap-3">
+    <div className="absolute bottom-6 right-6 z-[1001] flex flex-col items-end gap-3">
       {onCrisisModeToggle && (
         <motion.button
           type="button"

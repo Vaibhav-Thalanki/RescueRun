@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ensureDeviceToken } from './api/device';
 import { fetchRequests } from './api/requests';
 import MapView from './components/MapView';
-import BottomSheet from './components/BottomSheet';
+import Sidebar from './components/Sidebar';
 import RequestModal from './components/RequestModal';
 import CreateRequestModal from './components/CreateRequestModal';
 import FloatingButtons from './components/FloatingButtons';
@@ -80,35 +80,41 @@ export default function App() {
   }, [loadRequests]);
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-slate-950 text-white">
-      <div className="absolute top-0 left-0 right-0 z-[1200] flex justify-center px-4 py-2 bg-amber-500/90 text-black text-center text-sm font-medium shadow-md">
+    <div className="h-screen w-screen overflow-hidden bg-slate-950 text-white flex flex-col">
+      <div className="w-full z-[1200] flex justify-center px-4 py-2 bg-amber-500/90 text-black text-center text-sm font-medium shadow-md">
         Ranked by urgency and vulnerability, not profit.
       </div>
 
-      <div className="pt-12 h-full">
-        <MapView
-          requests={requests}
-          onBoundsChange={handleBoundsChange}
-          onRequestClick={handleRequestClick}
-          pickedLocation={pickedLocation}
-          onMapPick={setPickedLocation}
-          selectedRequestId={selectedRequestId}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left Sidebar - 1/3 width */}
+        <div className="w-1/3 h-full relative z-[1000]">
+          <Sidebar
+            requests={requests}
+            loading={loading}
+            selectedRequestId={selectedRequestId}
+            onRequestClick={handleRequestClick}
+            crisisMode={crisisMode}
+          />
+        </div>
+
+        {/* Right Map - 2/3 width */}
+        <div className="w-2/3 h-full relative">
+          <MapView
+            requests={requests}
+            onBoundsChange={handleBoundsChange}
+            onRequestClick={handleRequestClick}
+            pickedLocation={pickedLocation}
+            onMapPick={setPickedLocation}
+            selectedRequestId={selectedRequestId}
+          />
+        </div>
+
+        <FloatingButtons
+          onCreateRequest={() => setCreateModalOpen(true)}
+          crisisMode={crisisMode}
+          onCrisisModeToggle={() => setCrisisMode((v) => !v)}
         />
       </div>
-
-      <BottomSheet
-        requests={requests}
-        loading={loading}
-        selectedRequestId={selectedRequestId}
-        onRequestClick={handleRequestClick}
-        crisisMode={crisisMode}
-      />
-
-      <FloatingButtons
-        onCreateRequest={() => setCreateModalOpen(true)}
-        crisisMode={crisisMode}
-        onCrisisModeToggle={() => setCrisisMode((v) => !v)}
-      />
 
       <RequestModal
         requestId={selectedRequestId}
